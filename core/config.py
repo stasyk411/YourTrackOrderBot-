@@ -30,3 +30,5 @@ def get_bot_config() -> BotConfig:
         night_start=time(22, 0),
         night_end=time(9, 0),
     )
+NIGHT_START = time(22, 0)  # 22:00
+NIGHT_END = time(9, 0)     # 09:00
