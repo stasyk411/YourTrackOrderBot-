@@ -1,31 +1,17 @@
 import telebot
 from telebot import types
-from datetime import datetime, time
-from dotenv import load_dotenv
-import os
-from pathlib import Path
+from datetime import datetime
+from core.config import get_bot_config
 
 
-# Загружаем переменные из .env рядом с bot.py
-env_path = Path(__file__).parent / ".env"
-load_dotenv(dotenv_path=env_path)
-
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-
-if not BOT_TOKEN:
-    raise RuntimeError(f"Не задан TELEGRAM_BOT_TOKEN в .env по пути {env_path}")
-
-bot = telebot.TeleBot(BOT_TOKEN)
-
-# Ночной интервал для NightGuard
-NIGHT_START = time(22, 0)
-NIGHT_END = time(9, 0)
+config = get_bot_config()
+bot = telebot.TeleBot(config.token)
 
 
 def is_night() -> bool:
     """Проверка: сейчас ночь или нет."""
     now = datetime.now().time()
-    return NIGHT_START <= now or now <= NIGHT_END
+    return config.night_start <= now or now <= config.night_end
 
 
 @bot.message_handler(commands=['start'])
@@ -55,7 +41,8 @@ def track(message):
     )
 
 
-# ---------- НОВЫЙ БЛОК ШАБЛОНОВ ----------
+# ---------- БЛОК ШАБЛОНОВ ----------
+
 
 @bot.message_handler(commands=['templates'])
 def templates(message):
@@ -281,6 +268,7 @@ def callback(call):
 
 
 # ---------- НОЧНОЙ РЕЖИМ И ОПЛАТА ----------
+
 
 @bot.message_handler(commands=['night'])
 def night(message):
