@@ -2,6 +2,8 @@ import telebot
 from telebot import types
 from datetime import datetime
 from core.config import get_bot_config
+from handlers.start import register_handlers_start
+from handlers.templates import register_handlers_templates
 
 
 config = get_bot_config()
@@ -297,6 +299,10 @@ def pay(message):
         '💳 300₽/мес TrackOrderPro',
         reply_markup=markup
     )
+
+# Регистрируем хендлеры
+register_handlers_start(bot)
+register_handlers_templates(bot)
 
 
 if __name__ == "__main__":
