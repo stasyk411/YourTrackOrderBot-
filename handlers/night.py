@@ -1,25 +1,24 @@
 from telebot import types
-from core.config import NIGHT_START, NIGHT_END
 from datetime import datetime, time
+from core.config import get_bot_config
+from bot import bot  # bot из bot.py
 
-def get_time_state(now: time) -> str:
-    """Возвращает состояние времени суток по MSK стандартам."""
-    if now <= time(6, 0):           # 00:00–06:00
-        return "🌙 Ночь (не отвечай клиентам!)"
-    elif now < time(12, 0):         # 06:00–12:00
-        return "☀️ Утро (можно трекать)"
-    elif now < time(18, 0):         # 12:00–18:00
-        return "🌤️ День (можно трекать)"
-    elif now < NIGHT_START:         # 18:00–22:00
+def get_time_state(now: datetime) -> str:
+    config = get_bot_config()
+    now_msk = now.time()  # сервер/локал = MSK
+
+    if now_msk >= config.night_start or now_msk <= config.night_end:
+        return "🌙 Ночь (автоответ, не трекать)"
+    elif config.morning_start <= now_msk < config.morning_end:
+        return "🌅 Утро (можно трекать)"
+    elif config.day_start <= now_msk < config.day_end:
+        return "☀️ День (можно трекать)"
+    elif config.evening_start <= now_msk < config.evening_end:
         return "🌆 Вечер (можно трекать)"
-    else:                           # 22:00–00:00
-        return "🌙 Ночь (не отвечай клиентам!)"
+    return "☀️ День (можно трекать)"
 
-def register_handlers_night(bot):
-    """Команда /night показывает текущее время суток."""
-    
-    @bot.message_handler(commands=['night'])
-    def night(message):
-        now = datetime.now().time()
-        state = get_time_state(now)
-        bot.reply_to(message, f"⏰ Сейчас {state} (MSK)")
+@bot.message_handler(commands=['night'])
+def night_handler(message):
+    now = datetime.now()
+    state = get_time_state(now)
+    bot.reply_to(message, f"⏰ Сейчас {state} (MSK)")
