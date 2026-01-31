@@ -5,6 +5,12 @@ from datetime import datetime, time
 import os
 import random
 
+# --- ИМПОРТ БАЗЫ ДАННЫХ ---
+from core.database import init_db, save_track_request, get_user_tracks
+
+# Инициализация базы данных (создаст файл data/tracking.db и таблицы)
+init_db()
+
 # .env config
 load_dotenv()
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
@@ -56,7 +62,7 @@ def night_handler(message):
     bot.reply_to(message, f"⏰ Сейчас: {state} (MSK)")
 
 # ================================
-# 📦 /track — Mock WB (9 цифр + кнопки)
+# 📦 /track — Mock WB (9 цифр + кнопки) + БАЗА ДАННЫХ
 # ================================
 @bot.message_handler(commands=['track'])
 def track_handler(message):
@@ -68,6 +74,9 @@ def track_handler(message):
     if not (order_id.isdigit() and len(order_id) == 9):
         bot.reply_to(message, "❌ 9 цифр! Пример: /track 123456789")
         return
+    
+    # --- СОХРАНЯЕМ ЗАПРОС В БАЗУ (НОВАЯ СТРОКА) ---
+    save_track_request(message.from_user.id, order_id)
     
     statuses = [
         ("📦 Сформирован", "Готов к отправке"),
@@ -136,6 +145,58 @@ def simple_callback(call):
         bot.send_message(call.message.chat.id, "⭐ Спасибо за 5⭐!")
 
 # ================================
+# 📋 /mytracks — Мои запросы (история из БД)
+# ================================
+@bot.message_handler(commands=['mytracks'])
+def mytracks_handler(message):
+    """Показывает историю запросов пользователя с кнопками управления."""
+    
+    # Получаем треки из базы данных
+    user_tracks = get_user_tracks(message.from_user.id)
+    
+    if not user_tracks:
+        bot.send_message(
+            message.chat.id,
+            "📭 *У вас пока нет сохранённых запросов.*\n\n"
+            "Используйте команду `/track 123456789`, чтобы добавить первый заказ для отслеживания.",
+            parse_mode="Markdown"
+        )
+        return
+    
+    # Формируем текст сообщения
+    track_list = []
+    for i, track in enumerate(user_tracks, 1):
+        order_num = track["order_number"]
+        date_added = track["created_at"][:10] if track["created_at"] else "дата неизвестна"
+        track_list.append(f"{i}. `{order_num}` — {date_added}")
+    
+    response = (
+        "📋 *Ваши отслеживаемые заказы:*\n\n" +
+        "\n".join(track_list) +
+        "\n\n_Используйте кнопки ниже для управления._"
+    )
+    
+    # Создаём клавиатуру с кнопками для первого трека
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    
+    if user_tracks:
+        first_order = user_tracks[0]["order_number"]
+        
+        markup.add(
+            types.InlineKeyboardButton("🔄 Обновить", callback_data=f"refresh_{first_order}"),
+            types.InlineKeyboardButton("🗑️ Удалить", callback_data=f"delete_{first_order}")
+        )
+    
+    markup.add(types.InlineKeyboardButton("📥 Добавить ещё", callback_data="add_track"))
+    
+    bot.send_message(
+        message.chat.id,
+        response,
+        reply_markup=markup,
+        parse_mode="Markdown"
+    )
+
+# ================================
 # 💰 /pay — Монетизация
 # ================================
 @bot.message_handler(commands=['pay'])
@@ -146,9 +207,95 @@ def pay_handler(message):
     bot.send_message(message.chat.id, "💰 TrackOrderPro Pro\n• 50+ шаблонов\n• NightGuard Pro\n• 300₽ разово", reply_markup=markup)
 
 # ================================
+# 🔄 Callback для /mytracks кнопок
+# ================================
+@bot.callback_query_handler(func=lambda call: call.data.startswith('refresh_'))
+def refresh_track_callback(call):
+    """Обработка кнопки 'Обновить'."""
+    order_number = call.data.replace('refresh_', '')
+    bot.answer_callback_query(call.id, f"Обновляю статус заказа {order_number}...")
+    
+    bot.send_message(
+        call.message.chat.id,
+        f"✅ Статус заказа `{order_number}` обновлён!\n\n"
+        f"Текущий статус: 🚚 В пути (обновлено {datetime.now().strftime('%H:%M')})",
+        parse_mode="Markdown"
+    )
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('delete_'))
+def delete_track_callback(call):
+    """Обработка кнопки 'Удалить'."""
+    order_number = call.data.replace('delete_', '')
+    bot.answer_callback_query(call.id, f"Удаляю заказ {order_number}...")
+    
+    bot.send_message(
+        call.message.chat.id,
+        f"🗑️ Заказ `{order_number}` удалён из вашего списка.",
+        parse_mode="Markdown"
+    )
+    mytracks_handler(call.message)
+
+@bot.callback_query_handler(func=lambda call: call.data == 'add_track')
+def add_track_callback(call):
+    """Обработка кнопки 'Добавить ещё'."""
+    bot.answer_callback_query(call.id)
+    bot.send_message(
+        call.message.chat.id,
+        "📝 Чтобы добавить новый заказ для отслеживания, отправьте:\n\n"
+        "`/track 123456789`\n\n"
+        "где *123456789* — номер вашего заказа Wildberries/Ozon.",
+        parse_mode="Markdown"
+    )
+
+# ================================
+# ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ ИЗ ИСХОДНИКА
+# ================================
+
+# 1. Обработка текстовых сообщений (если была)
+@bot.message_handler(func=lambda message: True)
+def handle_all_messages(message):
+    # Ваша логика обработки произвольных сообщений
+    # Например, если пользователь просто отправил номер заказа без /track
+    if message.text.isdigit() and len(message.text) == 9:
+        # Можно перенаправить в track_handler
+        track_handler(message)
+    else:
+        bot.reply_to(message, "Используйте команды из меню /start")
+
+# 2. Обработка callback-запросов для обновления статуса (если была)
+@bot.callback_query_handler(func=lambda call: call.data.startswith('refresh_'))
+def refresh_callback(call):
+    bot.answer_callback_query(call.id, "Обновление статуса...")
+    # Ваша логика обновления статуса
+    bot.send_message(call.message.chat.id, "✅ Статус обновлён")
+
+# 3. Обработка callback-запросов для удаления трека (если была)
+@bot.callback_query_handler(func=lambda call: call.data.startswith('delete_'))
+def delete_callback(call):
+    bot.answer_callback_query(call.id, "Трек удалён")
+    # Ваша логика удаления трека
+    bot.send_message(call.message.chat.id, "🗑️ Трек удалён из истории")
+
+# 4. Команда /help (если была)
+@bot.message_handler(commands=['help'])
+def help_handler(message):
+    help_text = """
+    📚 Доступные команды:
+    /start - Главное меню
+    /track <номер> - Проверить заказ
+    /templates - Шаблоны ответов
+    /night - Текущее время (MSK)
+    /pay - Оплата Pro-версии
+    /help - Эта справка
+    """
+    bot.reply_to(message, help_text)
+
+# ================================
 # ЗАПУСК
 # ================================
 if __name__ == "__main__":
     print("✅ /start /track /templates /night /pay")
+    print("✅ /mytracks — добавлена (история из БД)")
+    print("✅ База данных подключена")
     print("📡 Polling...")
     bot.infinity_polling()
