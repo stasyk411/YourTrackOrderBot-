@@ -8,8 +8,8 @@ import random
 # --- ИМПОРТ БАЗЫ ДАННЫХ ---
 from core.database import init_db, save_track_request, get_user_tracks
 
-# Инициализация базы данных (создаст файл data/tracking.db и таблицы)
-init_db()
+# --- ИМПОРТ PDF ГЕНЕРАТОРА ---
+from core.pdf_generator import generate_pdf_guide, PDFGenerator
 
 # ================================
 # 📚 БАЗА ШАБЛОНОВ — 30+ ответов для продавцов WB/Ozon
@@ -90,6 +90,9 @@ config = Config()
 bot = telebot.TeleBot(TOKEN)
 print("🚀 TrackOrderPro MVP — Полный (Day 1-3)")
 
+# Инициализация базы данных (создаст файл data/tracking.db и таблицы)
+init_db()
+
 # ================================
 # /start — Главное меню
 # ================================
@@ -97,11 +100,15 @@ print("🚀 TrackOrderPro MVP — Полный (Day 1-3)")
 def start_handler(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("📦 /track", "📝 /templates")
-    markup.add("🌙 /night", "💰 /pay")
+    markup.add("📄 /get_pdf", "🌙 /night")
+    markup.add("💰 /pay", "📋 /mytracks")
+    
     bot.send_message(message.chat.id, 
         "🔥 TrackOrderPro WB/Ozon (MVP)\n\n"
         "📦 /track 123456789\n"
         "📝 /templates — 50+ ответов\n"
+        "📄 /get_pdf — PDF гайд (32 шаблона)\n"
+        "📋 /mytracks — история запросов\n"
         "🌙 /night — время MSK\n"
         "💰 /pay 300₽ Pro", 
         reply_markup=markup)
@@ -137,7 +144,7 @@ def track_handler(message):
         bot.reply_to(message, "❌ 9 цифр! Пример: /track 123456789")
         return
     
-    # --- СОХРАНЯЕМ ЗАПРОС В БАЗУ (НОВАЯ СТРОКА) ---
+    # --- СОХРАНЯЕМ ЗАПРОС В БАЗУ ---
     save_track_request(message.from_user.id, order_id)
     
     statuses = [
@@ -332,7 +339,79 @@ def pay_handler(message):
     markup = types.InlineKeyboardMarkup()
     btn = types.InlineKeyboardButton("💳 300₽ Pro (50+ шаблонов)", url="https://yoomoney.ru/to/41001750951472")
     markup.add(btn)
-    bot.send_message(message.chat.id, "💰 TrackOrderPro Pro\n• 50+ шаблонов\n• NightGuard Pro\n• 300₽ разово", reply_markup=markup)
+    bot.send_message(message.chat.id, "💰 TrackOrderPro Pro\n• 50+ шаблона\n• NightGuard Pro\n• 300₽ разово", reply_markup=markup)
+
+# ================================
+# 📄 /get_pdf — PDF гайд с шаблонами
+# ================================
+@bot.message_handler(commands=['get_pdf'])
+def get_pdf_handler(message):
+    """Отправляет PDF файл с шаблонами ответов."""
+    
+    # Информируем пользователя о начале генерации
+    msg = bot.reply_to(message, "📄 *Создаю PDF гайд с шаблонами...*\n\nПожалуйста, подождите 10-15 секунд.", parse_mode="Markdown")
+    
+    try:
+        # Генерируем PDF
+        pdf_generator = PDFGenerator()
+        pdf_path = pdf_generator.generate_templates_pdf()
+        
+        if not pdf_path:
+            bot.edit_message_text(
+                chat_id=message.chat.id,
+                message_id=msg.message_id,
+                text="❌ *Не удалось создать PDF файл.*\n\nПопробуйте позже или обратитесь к администратору.",
+                parse_mode="Markdown"
+            )
+            return
+        
+        # Отправляем PDF файл
+        with open(pdf_path, 'rb') as pdf_file:
+            bot.send_document(
+                chat_id=message.chat.id,
+                document=pdf_file,
+                caption=(
+                    "📚 *32 шаблона ответов для продавцов Wildberries/Ozon*\n\n"
+                    "✅ 6 категорий ответов\n"
+                    "✅ 32 готовых шаблона\n"
+                    "✅ Адаптировано под российский рынок\n"
+                    "✅ Автоматизация 80% рутинных ответов\n\n"
+                    "🤖 *Также доступно в боте:*\n"
+                    "• `/templates` — все шаблоны в Telegram\n"
+                    "• `/track` — отслеживание заказов\n"
+                    "• `/mytracks` — история запросов\n"
+                    "• `/night` — ночной режим"
+                ),
+                parse_mode="Markdown",
+                reply_to_message_id=message.message_id
+            )
+        
+        # Удаляем сообщение о загрузке
+        bot.delete_message(chat_id=message.chat.id, message_id=msg.message_id)
+        
+        # Отправляем подсказку
+        bot.send_message(
+            message.chat.id,
+            "💡 *Совет по использованию:*\n\n"
+            "1. Сохраните PDF на телефон/компьютер\n"
+            "2. Используйте поиск по категориям\n"
+            "3. Копируйте шаблоны прямо в чаты с покупателями\n"
+            "4. Делитесь с коллегами-продавцами\n\n"
+            "📱 *Для быстрого доступа в телефоне используйте команду `/templates` в этом боте!*",
+            parse_mode="Markdown"
+        )
+        
+    except Exception as e:
+        # Логируем ошибку
+        print(f"❌ Ошибка при создании PDF: {e}")
+        
+        # Уведомляем пользователя
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=msg.message_id,
+            text=f"❌ *Произошла ошибка при создании PDF.*\n\nТехническая информация: `{str(e)[:100]}`\n\nПопробуйте позже.",
+            parse_mode="Markdown"
+        )
 
 # ================================
 # 🔄 Callback для /mytracks кнопок
@@ -390,21 +469,7 @@ def handle_all_messages(message):
     else:
         bot.reply_to(message, "Используйте команды из меню /start")
 
-# 2. Обработка callback-запросов для обновления статуса (если была)
-@bot.callback_query_handler(func=lambda call: call.data.startswith('refresh_'))
-def refresh_callback(call):
-    bot.answer_callback_query(call.id, "Обновление статуса...")
-    # Ваша логика обновления статуса
-    bot.send_message(call.message.chat.id, "✅ Статус обновлён")
-
-# 3. Обработка callback-запросов для удаления трека (если была)
-@bot.callback_query_handler(func=lambda call: call.data.startswith('delete_'))
-def delete_callback(call):
-    bot.answer_callback_query(call.id, "Трек удалён")
-    # Ваша логика удаления трека
-    bot.send_message(call.message.chat.id, "🗑️ Трек удалён из истории")
-
-# 4. Команда /help (если была)
+# 2. Команда /help (если была)
 @bot.message_handler(commands=['help'])
 def help_handler(message):
     help_text = """
@@ -412,6 +477,7 @@ def help_handler(message):
     /start - Главное меню
     /track <номер> - Проверить заказ
     /templates - Шаблоны ответов (30+ вариантов)
+    /get_pdf - PDF гайд с шаблонами (32 шаблона)
     /night - Текущее время (MSK)
     /pay - Оплата Pro-версии
     /mytracks - История ваших запросов
@@ -424,9 +490,11 @@ def help_handler(message):
 # ================================
 if __name__ == "__main__":
     print("🚀 TrackOrderPro MVP+ — Полный функционал")
-    print("✅ /start /track /templates /night /pay")
+    print("✅ /start /track /templates /get_pdf /night /pay")
     print("✅ /mytracks — история запросов из БД")
     print("✅ /templates — 6 категорий, 32 шаблона с навигацией")
+    print("✅ /get_pdf — PDF гайд с шаблонами")
     print("✅ База данных подключена")
+    print("✅ PDF генератор готов")
     print("📡 Polling...")
     bot.infinity_polling()
