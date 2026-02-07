@@ -46,6 +46,16 @@ def register_handlers(bot, config):
     except Exception as e:
         print(f"⚠️ Ошибка регистрации /pay: {e}")
     
+    # 4. Хендлер /get_pdf (перенесён)
+    try:
+        from handlers.get_pdf import register as register_get_pdf
+        register_get_pdf(bot, config)
+        print("✅ /get_pdf зарегистрирован")
+    except ImportError as e:
+        print(f"⚠️ Ошибка импорта handlers.get_pdf: {e}")
+    except Exception as e:
+        print(f"⚠️ Ошибка регистрации /get_pdf: {e}")
+    
     # TODO: Добавить остальные хендлеры по мере переноса:
     # from handlers.track import register as register_track  
     # register_track(bot, config)
