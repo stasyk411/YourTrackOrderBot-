@@ -1,21 +1,50 @@
+"""
+handlers/start.py - Обработчик команды /start
+Главное меню бота с описанием всех команд
+"""
+
 from telebot import types
 
 
-def register_handlers_start(bot):
-    """Регистрация хендлера для /start."""
+def handle_start(bot, message):
+    """
+    Обработчик команды /start - показывает главное меню
+    
+    Args:
+        bot: Экземпляр telebot.TeleBot
+        message: Объект сообщения
+    """
+    # Создаём клавиатуру с основными командами
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("📦 /трек", "📝 /шаблоны")
+    markup.add("📄 /get_pdf", "🌙 /ночь")
+    markup.add("💰 /оплата", "📋 /моизаказы")
+    
+    # Текст приветствия (без упоминаний конкретных площадок)
+    welcome_text = (
+        "🔥 TrackOrderPro - Умный помощник для продавцов\n\n"
+        "📦 /трек 123456789 - Отследить заказ\n"
+        "📝 /шаблоны - 50+ готовых ответов\n"
+        "📄 /get_pdf - PDF гайд с шаблонами\n"
+        "📋 /моизаказы - История ваших запросов\n"
+        "🌙 /ночь - Текущее время (MSK)\n"
+        "💰 /оплата - Pro версия 590₽/месяц"
+    )
+    
+    bot.send_message(message.chat.id, welcome_text, reply_markup=markup)
 
+
+def register(bot, config):
+    """
+    Регистрирует хендлеры для команды /start
+    
+    Args:
+        bot: Экземпляр telebot.TeleBot
+        config: Конфигурация из core.config.Config
+    """
     @bot.message_handler(commands=['start'])
-    def start(message):
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add('/track', '/templates', '/night', '/pay')
-        bot.send_message(
-            message.chat.id,
-            (
-                '🔥 TrackOrderPro WB/Ozon\n'
-                '/track 123456 → статус заказа\n'
-                '/templates → шаблоны ответов\n'
-                '/night → ночной режим\n'
-                '/pay → 300₽/мес'
-            ),
-            reply_markup=markup
-        )
+    def start_wrapper(message):
+        """Обёртка для регистрации в декораторе"""
+        handle_start(bot, message)
+    
+    print("✅ Хендлер /start зарегистрирован")

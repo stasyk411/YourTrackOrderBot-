@@ -26,10 +26,17 @@ def register_handlers(bot, config):
     except Exception as e:
         print(f"⚠️ Ошибка регистрации /night: {e}")
     
-    # TODO: Добавить остальные хендлеры по мере переноса:
-    # from handlers.start import register as register_start
-    # register_start(bot, config)
+    # 2. Хендлер /start (перенесён)
+    try:
+        from handlers.start import register as register_start
+        register_start(bot, config)
+        print("✅ /start зарегистрирован")
+    except ImportError as e:
+        print(f"⚠️ Ошибка импорта handlers.start: {e}")
+    except Exception as e:
+        print(f"⚠️ Ошибка регистрации /start: {e}")
     
+    # TODO: Добавить остальные хендлеры по мере переноса:
     # from handlers.track import register as register_track  
     # register_track(bot, config)
     
