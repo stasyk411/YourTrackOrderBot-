@@ -1,0 +1,42 @@
+"""
+app/routes.py - Регистрация всех хендлеров бота
+Здесь подключаются все обработчики из папки handlers/
+"""
+
+def register_handlers(bot, config):
+    """
+    Регистрирует все хендлеры для бота
+    
+    Args:
+        bot: экземпляр TeleBot
+        config: конфигурация приложения
+    """
+    print("📋 Регистрация маршрутов...")
+    
+    # Импортируем хендлеры здесь, чтобы избежать циклических импортов
+    # Каждый хендлер добавляется по мере рефакторинга
+    
+    # 1. Хендлер /night (перенесён)
+    try:
+        from handlers.night import register as register_night
+        register_night(bot, config)
+        print("✅ /night зарегистрирован")
+    except ImportError as e:
+        print(f"⚠️ Ошибка импорта handlers.night: {e}")
+    except Exception as e:
+        print(f"⚠️ Ошибка регистрации /night: {e}")
+    
+    # TODO: Добавить остальные хендлеры по мере переноса:
+    # from handlers.start import register as register_start
+    # register_start(bot, config)
+    
+    # from handlers.track import register as register_track  
+    # register_track(bot, config)
+    
+    # from handlers.templates import register as register_templates
+    # register_templates(bot, config)
+    
+    # from handlers.mytracks import register as register_mytracks
+    # register_mytracks(bot, config)
+    
+    print("✅ Все маршруты зарегистрированы")
