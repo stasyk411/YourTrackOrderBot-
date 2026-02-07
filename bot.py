@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 from datetime import datetime, time
 import os
 import random
+import re
+import requests
 
 # --- ИМПОРТ БАЗЫ ДАННЫХ ---
 from core.database import init_db, save_track_request, get_user_tracks
@@ -133,23 +135,12 @@ def night_handler(message):
 # ================================
 # 📦 /track — Реальный трекинг СДЭК + БАЗА ДАННЫХ
 # ================================
-import requests
-
 def get_cdek_status(track_number: str) -> tuple:
     """
     Получает статус трека СДЭК через публичный API (без авторизации)
     Возвращает кортеж: (статус, детали)
     """
     try:
-        # Публичный API СДЭК для трекинга (без авторизации)
-        # Альтернативные публичные эндпоинты:
-        # 1. Через сайт СДЭК
-        # 2. Через парсинг страницы
-        # 3. Через сторонние сервисы
-        
-        # Временное решение: используем публичный парсинг
-        # (Это нужно заменить на реальный парсинг позже)
-        
         # Определяем тип трек-номера
         if track_number.upper().startswith('SD') or track_number.upper().startswith('CD'):
             # Это трек СДЭК
@@ -165,6 +156,7 @@ def get_cdek_status(track_number: str) -> tuple:
             
     except Exception as e:
         return ("⚠️ Ошибка", f"Техническая проблема: {str(e)[:50]}")
+
 @bot.message_handler(commands=['track'])
 def track_handler(message):
     parts = message.text.split(maxsplit=1)
@@ -481,26 +473,171 @@ def add_track_callback(call):
         call.message.chat.id,
         "📝 Чтобы добавить новый заказ для отслеживания, отправьте:\n\n"
         "`/track 123456789`\n\n"
-        "где *123456789* — номер вашего заказа Wildberries/Ozon.",
+        "где *123456789* — номер вашего заказ Wildberries/Ozon.",
         parse_mode="Markdown"
     )
 
 # ================================
-# ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ ИЗ ИСХОДНИКА
+# 🔄 CALLBACK ДЛЯ БЫСТРОГО ТРЕКИНГА ИЗ ПАРСИНГА
 # ================================
+@bot.callback_query_handler(func=lambda call: call.data.startswith('quick_track_'))
+def quick_track_callback(call):
+    """Обработка кнопки быстрого трекинга из парсинга"""
+    try:
+        # Извлекаем номер из callback_data
+        track_number = call.data.replace('quick_track_', '')
+        
+        # Отвечаем на callback (убираем часики)
+        bot.answer_callback_query(call.id, f"📦 Отслеживаю {track_number[:10]}...")
+        
+        # Имитируем команду /track
+        # Создаём fake-сообщение для вызова track_handler
+        class FakeMessage:
+            def __init__(self):
+                self.chat = type('obj', (object,), {'id': call.message.chat.id})()
+                self.from_user = type('obj', (object,), {'id': call.from_user.id})()
+                self.text = f"/track {track_number}"
+                self.message_id = call.message.message_id
+        
+        # Вызываем track_handler с fake-сообщением
+        track_handler(FakeMessage())
+        
+        # Удаляем старое сообщение с кнопками (опционально)
+        try:
+            bot.delete_message(call.message.chat.id, call.message.message_id)
+        except:
+            pass  # Если не удалось удалить — не страшно
+            
+    except Exception as e:
+        bot.answer_callback_query(call.id, f"❌ Ошибка: {str(e)[:50]}")
+        print(f"Ошибка в quick_track_callback: {e}")
 
-# 1. Обработка текстовых сообщений (если была)
+@bot.callback_query_handler(func=lambda call: call.data == 'quick_template')
+def quick_template_callback(call):
+    """Обработка кнопки 'Ответить шаблоном'"""
+    bot.answer_callback_query(call.id, "📝 Открываю шаблоны...")
+    
+    # Открываем меню шаблонов
+    templates_handler(call.message)
+
+# ================================
+# 🔍 ПАРСИНГ НОМЕРОВ ИЗ СООБЩЕНИЙ + ОБРАБОТКА ВСЕХ СООБЩЕНИЙ
+# ================================
+def extract_order_numbers(text: str) -> list:
+    """
+    Извлекает номера заказов из текста сообщения.
+    Возвращает список найденных номеров.
+    """
+    if not text:
+        return []
+    
+    # Паттерны для поиска:
+    patterns = [
+        r'\b\d{5,}\b',                    # WB: 5+ цифр подряд
+        r'\b\d+-\d+\b',                   # Ozon: 123-456
+        r'\b(?:SD|CD)[A-Z0-9]{8,}\b',     # СДЭК: SD12345678
+        r'\bRA\d{9}RU\b',                 # Почта России: RA123456789RU
+        r'\b[A-Z]{2}\d{9}[A-Z]{2}\b',     # Международные треки
+    ]
+    
+    found_numbers = []
+    for pattern in patterns:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        found_numbers.extend(matches)
+    
+    return list(set(found_numbers))  # Убираем дубликаты
+
 @bot.message_handler(func=lambda message: True)
 def handle_all_messages(message):
-    # Ваша логика обработки произвольных сообщений
-    # Например, если пользователь просто отправил номер заказа без /track
-    if message.text.isdigit() and len(message.text) == 9:
-        # Можно перенаправить в track_handler
-        track_handler(message)
-    else:
-        bot.reply_to(message, "Используйте команды из меню /start")
+    """
+    Обрабатывает ВСЕ входящие сообщения.
+    1. Если пересланное сообщение — ищем номера и предлагаем отследить
+    2. Если просто текст с номером — предлагаем отследить
+    3. Иначе — стандартный ответ
+    """
+    
+    # Проверяем, является ли сообщение пересланным
+    if message.forward_date:
+        # Это пересланное сообщение (от клиента)
+        if message.text:
+            numbers = extract_order_numbers(message.text)
+            if numbers:
+                # Нашли номера — предлагаем отследить
+                markup = types.InlineKeyboardMarkup(row_width=2)
+                for num in numbers[:3]:  # Не более 3 номеров
+                    markup.add(types.InlineKeyboardButton(
+                        f"📦 Отследить {num[:10]}...", 
+                        callback_data=f"quick_track_{num}"
+                    ))
+                
+                markup.add(types.InlineKeyboardButton(
+                    "📝 Ответить шаблоном", 
+                    callback_data="quick_template"
+                ))
+                
+                bot.reply_to(message,
+                    f"🔍 *Найдено в пересланном сообщении:*\n\n" +
+                    "\n".join([f"• `{num}`" for num in numbers]) +
+                    f"\n\n📊 *Всего найдено:* {len(numbers)} номер(а)\n" +
+                    f"📎 *Тип:* {'СДЭК' if any('SD' in n.upper() or 'CD' in n.upper() for n in numbers) else 'WB/Ozon'}",
+                    reply_markup=markup,
+                    parse_mode="Markdown"
+                )
+                return
+    
+    # Проверяем обычный текст сообщения
+    if message.text and not message.text.startswith('/'):
+        numbers = extract_order_numbers(message.text)
+        if numbers:
+            # Нашли номер в обычном сообщении
+            if len(numbers) == 1:
+                # Один номер — сразу предлагаем отследить
+                markup = types.InlineKeyboardMarkup()
+                markup.add(types.InlineKeyboardButton(
+                    f"📦 Отследить {numbers[0]}", 
+                    callback_data=f"quick_track_{numbers[0]}"
+                ))
+                
+                bot.reply_to(message,
+                    f"🔍 *Найден номер заказа:* `{numbers[0]}`\n\n" +
+                    "Нажмите кнопку ниже чтобы отследить статус:",
+                    reply_markup=markup,
+                    parse_mode="Markdown"
+                )
+                return
+            else:
+                # Несколько номеров — показываем список
+                markup = types.InlineKeyboardMarkup(row_width=2)
+                for num in numbers[:3]:
+                    markup.add(types.InlineKeyboardButton(
+                        f"📦 {num[:10]}...", 
+                        callback_data=f"quick_track_{num}"
+                    ))
+                
+                bot.reply_to(message,
+                    f"🔍 *Найдены номера:*\n\n" +
+                    "\n".join([f"• `{num}`" for num in numbers[:5]]) +
+                    f"\n\n*Выберите номер для отслеживания:*",
+                    reply_markup=markup,
+                    parse_mode="Markdown"
+                )
+                return
+    
+    # Если не нашли номеров и это не команда — стандартный ответ
+    if message.text and not message.text.startswith('/'):
+        bot.reply_to(message,
+            "🤖 *TrackOrderPro*\n\n"
+            "Я могу:\n"
+            "• Найти номер заказа в вашем сообщении\n"
+            "• Отследить статус (/track)\n"
+            "• Дать шаблон ответа (/templates)\n\n"
+            "📌 *Просто перешлите мне сообщение от клиента с номером заказа!*",
+            parse_mode="Markdown"
+        )
 
+# ================================
 # 2. Команда /help (если была)
+# ================================
 @bot.message_handler(commands=['help'])
 def help_handler(message):
     help_text = """
