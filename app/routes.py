@@ -36,6 +36,16 @@ def register_handlers(bot, config):
     except Exception as e:
         print(f"⚠️ Ошибка регистрации /start: {e}")
     
+    # 3. Хендлер /pay (перенесён)
+    try:
+        from handlers.pay import register as register_pay
+        register_pay(bot, config)
+        print("✅ /pay зарегистрирован")
+    except ImportError as e:
+        print(f"⚠️ Ошибка импорта handlers.pay: {e}")
+    except Exception as e:
+        print(f"⚠️ Ошибка регистрации /pay: {e}")
+    
     # TODO: Добавить остальные хендлеры по мере переноса:
     # from handlers.track import register as register_track  
     # register_track(bot, config)
