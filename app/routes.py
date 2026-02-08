@@ -1,3 +1,9 @@
+# КОМАНДА: Закрываем файл и готовим новую версию
+# Сначала закройте VS Code с routes.py
+
+# Теперь создаём новую версию routes.py с добавленным /help
+# Копируйте ВЕСЬ этот код и замените текущий файл:
+
 """
 app/routes.py - Регистрация всех хендлеров бота
 Здесь подключаются все обработчики из папки handlers/
@@ -55,6 +61,16 @@ def register_handlers(bot, config):
         print(f"⚠️ Ошибка импорта handlers.get_pdf: {e}")
     except Exception as e:
         print(f"⚠️ Ошибка регистрации /get_pdf: {e}")
+    
+    # 5. Хендлер /help (новый)
+    try:
+        from handlers.help import register as register_help
+        register_help(bot, config)
+        print("✅ /help зарегистрирован")
+    except ImportError as e:
+        print(f"⚠️ Ошибка импорта handlers.help: {e}")
+    except Exception as e:
+        print(f"⚠️ Ошибка регистрации /help: {e}")
     
     # TODO: Добавить остальные хендлеры по мере переноса:
     # from handlers.track import register as register_track  

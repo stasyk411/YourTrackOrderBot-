@@ -22,14 +22,14 @@ def handle_start(bot, message):
     
     # ОРИГИНАЛЬНЫЙ текст приветствия (с "WB/Ozon" для чистого рефакторинга)
     welcome_text = (
-        "🔥 TrackOrderPro WB/Ozon (MVP)\n\n"
-        "📦 /трек 123456789\n"
-        "📝 /шаблоны — 50+ ответов\n"
-        "📄 /get_pdf — PDF гайд (40+ шаблонов)\n"
-        "📋 /моизаказы — история запросов\n"
-        "🌙 /ночь — время MSK\n"
-        "💰 /оплата 590₽ Pro"
-    )
+    "🔥 TrackOrderPro — ваш помощник (MVP)\n\n"
+    "📦 /трек 123456789\n"
+    "📝 /шаблоны — 50+ ответов\n"
+    "📄 /get_pdf — PDF гайд (40+ шаблонов)\n"
+    "📋 /моизаказы — история запросов\n"
+    "🌙 /ночь — время MSK\n"
+    "💰 /оплата 590₽ Pro"
+)
     
     bot.send_message(message.chat.id, welcome_text, reply_markup=markup)
 
