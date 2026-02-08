@@ -1,228 +1,340 @@
+"""
+handlers/templates.py - Обработчик команды /templates
+Показывает шаблоны ответов с использованием TemplateService
+"""
+
+import logging
 from telebot import types
 
+logger = logging.getLogger(__name__)
 
-def register_handlers_templates(bot):
-    """Команда /templates + все шаблоны с категориями."""
 
-    @bot.message_handler(commands=['templates'])
-    def templates(message):
-        """Первый экран: категории шаблонов."""
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("Размер / примерка", callback_data="cat_size"))
-        markup.add(types.InlineKeyboardButton("Доставка / задержка", callback_data="cat_delivery"))
-        markup.add(types.InlineKeyboardButton("ПВЗ / потерялось", callback_data="cat_pvz"))
-        markup.add(types.InlineKeyboardButton("Возврат / брак", callback_data="cat_return"))
-        markup.add(types.InlineKeyboardButton("Цена / скидки", callback_data="cat_price"))
-        markup.add(types.InlineKeyboardButton("Эмоции / отзывы", callback_data="cat_emotion"))
-
+def handle_templates(bot, message, template_service, page: int = 0, items_per_page: int = 5):
+    """
+    Обработчик команды /templates - показывает шаблоны ответов
+    
+    Args:
+        bot: Экземпляр telebot.TeleBot
+        message: Объект сообщения
+        template_service: Экземпляр TemplateService
+        page: Номер страницы (для пагинации)
+        items_per_page: Шаблонов на странице
+    """
+    try:
+        # Получаем популярные шаблоны для текущей страницы
+        all_popular = template_service.get_popular_templates(limit=50)
+        
+        # Пагинация
+        start_idx = page * items_per_page
+        end_idx = start_idx + items_per_page
+        current_page_templates = all_popular[start_idx:end_idx]
+        
+        if not current_page_templates:
+            bot.reply_to(message, "📭 Шаблоны не найдены")
+            return
+        
+        # Создаём клавиатуру с категориями
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+        
+        # Кнопки категорий
+        categories = template_service.get_all_categories()
+        category_names = {
+            'cat_size': '📏 Размеры',
+            'cat_delivery': '🚚 Доставка',
+            'cat_pvz': '🏪 ПВЗ',
+            'cat_return': '🔄 Возврат',
+            'cat_price': '💰 Цены',
+            'cat_emotion': '😍 Эмоции'
+        }
+        
+        category_buttons = []
+        for category in categories:
+            display_name = category_names.get(category, category)
+            category_buttons.append(display_name)
+        
+        # Добавляем кнопки категорий в 2 колонки
+        for i in range(0, len(category_buttons), 2):
+            row = category_buttons[i:i+2]
+            markup.add(*row)
+        
+        # Кнопки навигации
+        nav_buttons = []
+        if page > 0:
+            nav_buttons.append("◀️ Назад")
+        
+        if end_idx < len(all_popular):
+            nav_buttons.append("Вперед ▶️")
+        
+        if nav_buttons:
+            markup.add(*nav_buttons)
+        
+        markup.add("📋 Главное меню")
+        
+        # Формируем сообщение
+        message_text = "📚 *Шаблоны ответов*\n\n"
+        
+        # Добавляем информацию о странице
+        total_templates = template_service.get_template_count()
+        total_pages = (total_templates + items_per_page - 1) // items_per_page
+        
+        if total_pages > 1:
+            message_text += f"Страница {page + 1} из {total_pages}\n\n"
+        
+        # Показываем шаблоны текущей страницы
+        for i, template in enumerate(current_page_templates, start=1):
+            formatted = template_service.format_template_for_display(template)
+            
+            # Номер шаблона с учётом страницы
+            template_num = start_idx + i
+            
+            message_text += f"{template_num}. {formatted['display_title']}\n"
+            
+            # Добавляем категорию
+            message_text += f"   Категория: {formatted['category_display']}\n"
+            
+            # Добавляем теги если есть
+            if formatted.get('display_tags'):
+                message_text += f"   Теги: {formatted['display_tags']}\n"
+            
+            # Добавляем предпросмотр текста
+            preview = formatted.get('preview_text', '')
+            if preview:
+                message_text += f"   📝 {preview}\n"
+            
+            message_text += "\n"
+        
+        # Инструкции
+        message_text += "🔍 *Как использовать:*\n"
+        message_text += "• Нажмите на категорию для фильтрации\n"
+        message_text += "• Используйте кнопки навигации\n"
+        message_text += "• Или напишите /search [запрос] для поиска\n"
+        
         bot.send_message(
             message.chat.id,
-            "💬 Шаблоны WB: выбери тему",
+            message_text,
+            parse_mode="Markdown",
             reply_markup=markup
         )
+        
+        logger.info(f"Показаны шаблоны для user={message.from_user.id}, page={page}")
+        
+    except Exception as e:
+        logger.error(f"Ошибка в /templates: {e}", exc_info=True)
+        bot.reply_to(message, "❌ Произошла ошибка при загрузке шаблонов")
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("cat_") or call.data.split("_")[0] in {
-        "size", "delivery", "pvz", "return", "price", "emotion"
-    })
-    def callback(call):
-        # ---------- ВЫБОР КАТЕГОРИИ ----------
 
-        if call.data == "cat_size":
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("Размер не подошёл", callback_data="size_1"))
-            markup.add(types.InlineKeyboardButton("Как выбрать размер", callback_data="size_2"))
-            markup.add(types.InlineKeyboardButton("Замеры / параметры", callback_data="size_3"))
-            bot.send_message(
-                call.message.chat.id,
-                "Размер / примерка — выбери шаблон:",
-                reply_markup=markup
+def handle_template_search(bot, message, template_service):
+    """
+    Обработчик поиска шаблонов (/search [запрос])
+    
+    Args:
+        bot: Экземпляр telebot.TeleBot
+        message: Объект сообщения
+        template_service: Экземпляр TemplateService
+    """
+    try:
+        # Извлекаем поисковый запрос из сообщения
+        search_query = message.text.replace('/search', '').strip()
+        
+        if not search_query:
+            bot.reply_to(message, "🔍 *Использование:* /search [запрос]\n\nПример: /search доставка")
+            return
+        
+        # Выполняем поиск
+        results = template_service.search_templates(search_query, limit=10)
+        
+        if not results:
+            bot.reply_to(
+                message,
+                f"🔍 По запросу \"{search_query}\" ничего не найдено.\n\n"
+                f"Попробуйте другие ключевые слова:\n"
+                f"• доставка\n• размер\n• возврат\n• цена"
             )
+            return
+        
+        # Формируем сообщение с результатами
+        message_text = f"🔍 *Результаты поиска: \"{search_query}\"*\n\n"
+        message_text += f"Найдено шаблонов: {len(results)}\n\n"
+        
+        for i, template in enumerate(results, start=1):
+            formatted = template_service.format_template_for_display(template)
+            
+            message_text += f"{i}. {formatted['display_title']}\n"
+            message_text += f"   Категория: {formatted['category_display']}\n"
+            
+            if formatted.get('display_tags'):
+                message_text += f"   Теги: {formatted['display_tags']}\n"
+            
+            # Показываем фрагмент текста с подсветкой запроса
+            text_lower = template['text'].lower()
+            query_lower = search_query.lower()
+            
+            if query_lower in text_lower:
+                pos = text_lower.find(query_lower)
+                start = max(0, pos - 20)
+                end = min(len(template['text']), pos + len(search_query) + 20)
+                
+                fragment = template['text'][start:end]
+                if start > 0:
+                    fragment = "..." + fragment
+                if end < len(template['text']):
+                    fragment = fragment + "..."
+                
+                message_text += f"   📝 {fragment}\n"
+            
+            message_text += "\n"
+        
+        # Создаём клавиатуру для возврата
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add("📚 Все шаблоны", "📋 Главное меню")
+        
+        bot.send_message(
+            message.chat.id,
+            message_text,
+            parse_mode="Markdown",
+            reply_markup=markup
+        )
+        
+        logger.info(f"Поиск шаблонов: user={message.from_user.id}, query='{search_query}', results={len(results)}")
+        
+    except Exception as e:
+        logger.error(f"Ошибка поиска шаблонов: {e}", exc_info=True)
+        bot.reply_to(message, "❌ Произошла ошибка при поиске")
 
-        elif call.data == "cat_delivery":
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("Где мой заказ?", callback_data="delivery_1"))
-            markup.add(types.InlineKeyboardButton("Задержка доставки", callback_data="delivery_2"))
-            markup.add(types.InlineKeyboardButton("Когда приедет в ПВЗ", callback_data="delivery_3"))
-            bot.send_message(
-                call.message.chat.id,
-                "Доставка / задержка — выбери шаблон:",
-                reply_markup=markup
-            )
 
-        elif call.data == "cat_pvz":
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("ПВЗ не находит посылку", callback_data="pvz_1"))
-            markup.add(types.InlineKeyboardButton("Скан не прошёл / не выдают", callback_data="pvz_2"))
-            bot.send_message(
-                call.message.chat.id,
-                "ПВЗ / потерялось — выбери шаблон:",
-                reply_markup=markup
-            )
+def handle_template_category(bot, message, template_service, category_key: str):
+    """
+    Обработчик выбора категории шаблонов
+    
+    Args:
+        bot: Экземпляр telebot.TeleBot
+        message: Объект сообщения
+        template_service: Экземпляр TemplateService
+        category_key: Ключ категории (cat_size, cat_delivery и т.д.)
+    """
+    try:
+        # Получаем шаблоны категории
+        templates = template_service.get_templates_by_category(category_key)
+        
+        if not templates:
+            bot.reply_to(message, f"📭 В этой категории пока нет шаблонов")
+            return
+        
+        # Названия категорий для отображения
+        category_display_names = {
+            'cat_size': '📏 Размеры',
+            'cat_delivery': '🚚 Доставка',
+            'cat_pvz': '🏪 Пункты выдачи',
+            'cat_return': '🔄 Возврат и обмен',
+            'cat_price': '💰 Цены и акции',
+            'cat_emotion': '😍 Эмоции и благодарность'
+        }
+        
+        display_name = category_display_names.get(category_key, category_key)
+        
+        # Формируем сообщение
+        message_text = f"{display_name}\n\n"
+        message_text += f"Шаблонов в категории: {len(templates)}\n\n"
+        
+        for i, template in enumerate(templates, start=1):
+            formatted = template_service.format_template_for_display(template)
+            
+            message_text += f"{i}. {formatted['display_title']}\n"
+            
+            # Предпросмотр текста
+            preview = formatted.get('preview_text', '')
+            if preview:
+                message_text += f"   📝 {preview}\n"
+            
+            message_text += "\n"
+        
+        # Кнопки навигации
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add("📚 Все шаблоны", "🔍 Поиск", "📋 Главное меню")
+        
+        bot.send_message(
+            message.chat.id,
+            message_text,
+            parse_mode="Markdown",
+            reply_markup=markup
+        )
+        
+        logger.info(f"Показана категория: user={message.from_user.id}, category={category_key}")
+        
+    except Exception as e:
+        logger.error(f"Ошибка показа категории {category_key}: {e}", exc_info=True)
+        bot.reply_to(message, "❌ Произошла ошибка при загрузке категории")
 
-        elif call.data == "cat_return":
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("Как оформить возврат", callback_data="return_1"))
-            markup.add(types.InlineKeyboardButton("Брак / дефект", callback_data="return_2"))
-            markup.add(types.InlineKeyboardButton("Фото проблемы", callback_data="return_3"))
-            bot.send_message(
-                call.message.chat.id,
-                "Возврат / брак — выбери шаблон:",
-                reply_markup=markup
-            )
 
-        elif call.data == "cat_price":
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("Дадите скидку?", callback_data="price_1"))
-            markup.add(types.InlineKeyboardButton("Цена стала выше", callback_data="price_2"))
-            bot.send_message(
-                call.message.chat.id,
-                "Цена / скидки — выбери шаблон:",
-                reply_markup=markup
-            )
-
-        elif call.data == "cat_emotion":
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("Негатив / агрессия", callback_data="emotion_1"))
-            markup.add(types.InlineKeyboardButton("Перевести в конструктив", callback_data="emotion_2"))
-            markup.add(types.InlineKeyboardButton("Ответ на хороший отзыв", callback_data="emotion_3"))
-            bot.send_message(
-                call.message.chat.id,
-                "Эмоции / отзывы — выбери шаблон:",
-                reply_markup=markup
-            )
-
-        # ---------- КОНКРЕТНЫЕ ШАБЛОНЫ ----------
-
-        elif call.data == "size_1":
-            bot.send_message(
-                call.message.chat.id,
-                "Понимаю, такое бывает 😌 Давайте оформим возврат через приложение WB: "
-                "зайдите в раздел “Мои заказы”, выберите товар и нажмите “Оформить возврат”. "
-                "Если будет удобно — подберу альтернативу по размеру/модели."
-            )
-
-        elif call.data == "size_2":
-            bot.send_message(
-                call.message.chat.id,
-                "По размеру лучше ориентироваться на вашу обычную размерную сетку и отзывы покупателей. "
-                "Если сомневаетесь — напишите, какой размер обычно носите (рост, вес, параметры), "
-                "я подскажу, какой вариант выбрать у нас."
-            )
-
-        elif call.data == "size_3":
-            bot.send_message(
-                call.message.chat.id,
-                "Могу подсказать по замерам, чтобы вы попали в размер. "
-                "Напишите, пожалуйста, какие параметры интересуют (длина, ширина, ОБ/ОТ/ОГ и т.п.), "
-                "и я сверю по конкретной модели."
-            )
-
-        elif call.data == "delivery_1":
-            bot.send_message(
-                call.message.chat.id,
-                "Статус заказа можно посмотреть в приложении WB в разделе “Мои заказы”. "
-                "Сейчас у маркетплейсов бывают задержки по логистике, "
-                "но заказ обычно доезжает в ближайшие дни. "
-                "Если по срокам будет критично — напишите, постараюсь подсказать варианты."
-            )
-
-        elif call.data == "delivery_2":
-            bot.send_message(
-                call.message.chat.id,
-                "Вижу, что доставка задерживается, понимаю, что это неприятно. "
-                "К сожалению, за сроки отвечает логистика WB, продавец не может их изменить. "
-                "Обычно в таких случаях заказ всё же приезжает в течение 1–3 дней сверх первоначальной даты."
-            )
-
-        elif call.data == "delivery_3":
-            bot.send_message(
-                call.message.chat.id,
-                "Ориентировочная дата поступления в ПВЗ отображается в приложении WB в карточке заказа. "
-                "Как только посылка приедет в пункт выдачи, WB пришлёт вам пуш‑уведомление и SMS (если подключены). "
-                "Если срок сильно выйдет за обещанный — можно написать в поддержку WB через заказ."
-            )
-
-        elif call.data == "pvz_1":
-            bot.send_message(
-                call.message.chat.id,
-                "Если в приложении WB заказ числится “В ПВЗ”, но сотрудники пункта выдачи не находят его по коду, "
-                "нужно сразу зафиксировать обращение через поддержку WB напрямую из заказа. "
-                "Обычно после обращения заказ либо находят, либо оформляют возврат средств."
-            )
-
-        elif call.data == "pvz_2":
-            bot.send_message(
-                call.message.chat.id,
-                "Если скан‑код не считывается или сотрудники ПВЗ не выдают заказ, "
-                "сделайте, пожалуйста, скрин статуса заказа и обратитесь в поддержку WB из этого заказа. "
-                "Только они могут оперативно решить вопрос по ПВЗ или оформить возврат денег."
-            )
-
-        elif call.data == "return_1":
-            bot.send_message(
-                call.message.chat.id,
-                "Оформить возврат можно в приложении WB: откройте заказ, "
-                "нажмите “Оформить возврат” и следуйте шагам. "
-                "Деньги вернут тем же способом, которым оплачивали, "
-                "после того как товар вернётся на склад и его примут."
-            )
-
-        elif call.data == "return_2":
-            bot.send_message(
-                call.message.chat.id,
-                "Очень жаль, что вы столкнулись с браком 😔 "
-                "Пожалуйста, сделайте фото дефекта и приложите его в обращении через заказ в приложении WB. "
-                "Там же можно оформить возврат, а по фото я смогу передать информацию на склад, "
-                "чтобы такое больше не уходило другим клиентам."
-            )
-
-        elif call.data == "return_3":
-            bot.send_message(
-                call.message.chat.id,
-                "Пришлите, пожалуйста, фото проблемы (общий вид и крупный план дефекта). "
-                "Так я смогу точнее подсказать, как лучше оформить возврат или обмен, "
-                "и передать информацию на склад."
-            )
-
-        elif call.data == "price_1":
-            bot.send_message(
-                call.message.chat.id,
-                "На маркетплейсе цена и акции зависят от настроек площадки и действующих промо, "
-                "я физически не могу поставить индивидуальную цену для одного заказа. "
-                "Рекомендую добавить товар в избранное — WB часто показывает персональные промокоды "
-                "и акции именно на такие позиции."
-            )
-
-        elif call.data == "price_2":
-            bot.send_message(
-                call.message.chat.id,
-                "Цены на маркетплейсе могут меняться из‑за акций, скидок и условий самой площадки. "
-                "В какой‑то период товар мог попадать под промо, поэтому цена была ниже. "
-                "Сейчас отображается актуальная стоимость, но не исключено, что WB вернёт скидку позже."
-            )
-
-        elif call.data == "emotion_1":
-            bot.send_message(
-                call.message.chat.id,
-                "Понимаю ваши эмоции и правда не хочу, чтобы у вас остался негативный опыт. "
-                "Давайте по шагам разберём, что именно пошло не так: "
-                "напишите, пожалуйста, в чём основная проблема (качество, доставка, ПВЗ, возврат), "
-                "и я подскажу, что можно сделать в вашей ситуации."
-            )
-
-        elif call.data == "emotion_2":
-            bot.send_message(
-                call.message.chat.id,
-                "Вижу, что ситуация вас задела, и это нормально. "
-                "Давайте попробуем вместе решить вопрос: опишите, пожалуйста, коротко, что произошло "
-                "и какой результат вы бы хотели получить (обмен, возврат, подсказка по использованию и т.п.)."
-            )
-
-        elif call.data == "emotion_3":
-            bot.send_message(
-                call.message.chat.id,
-                "Спасибо вам большое за отзыв и доверие 🙌 "
-                "Нам очень приятно, что товар вам подошёл. "
-                "Ваши отзывы помогают нам улучшать ассортимент и сервис, "
-                "а другим покупателям — проще выбирать."
-            )
+def register(bot, config):
+    """
+    Регистрирует хендлеры для команд шаблонов
+    
+    Args:
+        bot: Экземпляр telebot.TeleBot
+        config: Конфигурация из core.config.Config
+    """
+    # Импортируем здесь чтобы избежать циклических импортов
+    from core.services import TemplateService
+    from data.templates_database import TEMPLATES_DATABASE
+    
+    # Создаём сервис
+    template_service = TemplateService(TEMPLATES_DATABASE)
+    
+    # Хранилище для состояния пользователей (страница)
+    user_pages = {}
+    
+    @bot.message_handler(commands=['templates', 'шаблоны'])
+    def templates_wrapper(message):
+        """Обёртка для команды /templates"""
+        user_id = message.from_user.id
+        page = user_pages.get(user_id, 0)
+        handle_templates(bot, message, template_service, page)
+    
+    @bot.message_handler(commands=['search'])
+    def search_wrapper(message):
+        """Обёртка для команды /search"""
+        handle_template_search(bot, message, template_service)
+    
+    @bot.message_handler(func=lambda message: message.text in [
+        "📏 Размеры", "🚚 Доставка", "🏪 ПВЗ", 
+        "🔄 Возврат", "💰 Цены", "😍 Эмоции"
+    ])
+    def category_button_wrapper(message):
+        """Обработчик кнопок категорий"""
+        # Сопоставляем отображаемые имена с ключами категорий
+        category_mapping = {
+            "📏 Размеры": "cat_size",
+            "🚚 Доставка": "cat_delivery",
+            "🏪 ПВЗ": "cat_pvz",
+            "🔄 Возврат": "cat_return",
+            "💰 Цены": "cat_price",
+            "😍 Эмоции": "cat_emotion"
+        }
+        
+        category_key = category_mapping.get(message.text)
+        if category_key:
+            handle_template_category(bot, message, template_service, category_key)
+    
+    @bot.message_handler(func=lambda message: message.text in ["◀️ Назад", "Вперед ▶️"])
+    def navigation_wrapper(message):
+        """Обработчик навигации по страницам"""
+        user_id = message.from_user.id
+        current_page = user_pages.get(user_id, 0)
+        
+        if message.text == "◀️ Назад" and current_page > 0:
+            user_pages[user_id] = current_page - 1
+        elif message.text == "Вперед ▶️":
+            user_pages[user_id] = current_page + 1
+        
+        handle_templates(bot, message, template_service, user_pages.get(user_id, 0))
+    
+    @bot.message_handler(func=lambda message: message.text == "📚 Все шаблоны")
+    def all_templates_wrapper(message):
+        """Обработчик кнопки 'Все шаблоны'"""
+        user_id = message.from_user.id
+        user_pages[user_id] = 0  # Сбрасываем на первую страницу
+        handle_templates(bot, message, template_service, 0)
+    
+    logger.info("Хендлеры шаблонов зарегистрированы")
+    print("✅ Хендлер /templates зарегистрирован")

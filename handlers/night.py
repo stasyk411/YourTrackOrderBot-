@@ -1,24 +1,59 @@
-from telebot import types
-from datetime import datetime, time
-from core.config import get_bot_config
+"""
+handlers/night.py - Обработчик команды /night
+Показывает текущее время и режим работы (ночной/дневной)
+"""
 
-def get_time_state(now: datetime) -> str:
-    config = get_bot_config()
+from datetime import datetime
+
+def get_time_state(now: datetime, config) -> str:
+    """
+    Определяет временной период (ночь/утро/день/вечер)
+    
+    Args:
+        now: Текущее время datetime
+        config: Конфигурация из core.config.Config
+        
+    Returns:
+        str: Описание периода
+    """
     now_msk = now.time()
 
     if now_msk >= config.night_start or now_msk <= config.night_end:
-        return "🌙 Ночь (автоответ, не трекать)"
+        return "🌙 Ночь (автоответ)"
     elif config.morning_start <= now_msk < config.morning_end:
-        return "🌅 Утро (можно трекать)"
+        return "🌅 Утро (трекать)"
     elif config.day_start <= now_msk < config.day_end:
-        return "☀️ День (можно трекать)"
+        return "☀️ День (трекать)"
     elif config.evening_start <= now_msk < config.evening_end:
-        return "🌆 Вечер (можно трекать)"
-    return "☀️ День (можно трекать)"
+        return "🌆 Вечер (трекать)"
+    return "☀️ День (трекать)"
 
-def register_handlers_night(bot):  # ← bot передаётся параметром!
-    @bot.message_handler(commands=['night'])
-    def night_handler(message):
-        now = datetime.now()
-        state = get_time_state(now)
-        bot.reply_to(message, f"⏰ Сейчас {state} (MSK)")
+
+def handle_night(bot, message, config):
+    """
+    Обработчик команды /night
+    
+    Args:
+        bot: Экземпляр telebot.TeleBot
+        message: Объект сообщения
+        config: Конфигурация из core.config.Config
+    """
+    now = datetime.now()
+    state = get_time_state(now, config)
+    bot.reply_to(message, f"⏰ Сейчас: {state} (MSK)")
+
+
+def register(bot, config):
+    """
+    Регистрирует хендлеры для команды /night
+    
+    Args:
+        bot: Экземпляр telebot.TeleBot
+        config: Конфигурация из core.config.Config
+    """
+    @bot.message_handler(commands=['night', 'ночь'])
+    def night_wrapper(message):
+        """Обёртка для регистрации в декораторе"""
+        handle_night(bot, message, config)
+    
+    print("✅ Хендлер /night зарегистрирован")

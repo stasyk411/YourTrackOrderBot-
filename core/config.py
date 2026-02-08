@@ -9,7 +9,7 @@ env_path = BASE_DIR / ".env"
 load_dotenv(dotenv_path=env_path)
 
 @dataclass
-class BotConfig:
+class Config:
     token: str
     morning_start: time = time(6, 0)
     morning_end: time = time(10, 0)
@@ -20,8 +20,8 @@ class BotConfig:
     night_start: time = time(22, 0)
     night_end: time = time(6, 0)
 
-def get_bot_config() -> BotConfig:
+def get_config() -> Config:
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
         raise ValueError(f"Токен не найден в .env по пути {env_path}")
-    return BotConfig(token=token)
+    return Config(token=token)
