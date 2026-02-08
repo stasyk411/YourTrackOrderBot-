@@ -3,6 +3,14 @@ app/main.py - Основная инициализация бота
 Здесь создается экземпляр бота и подключаются маршруты
 """
 
+import sys
+import os
+
+# Добавляем корень проекта в путь поиска модулей
+# Это решает проблему "No module named 'core'"
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
+
 import telebot
 from core.config import get_config
 
