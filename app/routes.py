@@ -62,22 +62,19 @@ def register_handlers(bot, config):
     except Exception as e:
         print(f"⚠️ Ошибка регистрации /get_pdf: {e}")
     
-    # 5. Хендлер /help (новый)
+        # 6. Хендлер /templates (новый)
     try:
-        from handlers.help import register as register_help
-        register_help(bot, config)
-        print("✅ /help зарегистрирован")
+        from handlers.templates import register as register_templates
+        register_templates(bot, config)
+        print("✅ /templates зарегистрирован")
     except ImportError as e:
-        print(f"⚠️ Ошибка импорта handlers.help: {e}")
+        print(f"⚠️ Ошибка импорта handlers.templates: {e}")
     except Exception as e:
-        print(f"⚠️ Ошибка регистрации /help: {e}")
+        print(f"⚠️ Ошибка регистрации /templates: {e}")
     
     # TODO: Добавить остальные хендлеры по мере переноса:
     # from handlers.track import register as register_track  
     # register_track(bot, config)
-    
-    # from handlers.templates import register as register_templates
-    # register_templates(bot, config)
     
     # from handlers.mytracks import register as register_mytracks
     # register_mytracks(bot, config)

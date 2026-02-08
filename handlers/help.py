@@ -47,8 +47,7 @@ def handle_help(bot, message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("📋 Назад в меню")
     
-    bot.send_message(message.chat.id, help_text, 
-                    parse_mode="Markdown", reply_markup=markup)
+    bot.send_message(message.chat.id, help_text, reply_markup=markup)
 
 
 def register(bot, config):

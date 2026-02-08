@@ -108,7 +108,43 @@ Write-Host "   4. Работать только в (.venv) окружении" -
 Write-Host ""
 Write-Host "   🚀 ТОЛЬКО ПОСЛЕ этого подтверждения можно начинать работу!" -ForegroundColor Cyan
 Write-Host ""
+# ============================================
+# 6. 🔍 ПРИНУДИТЕЛЬНАЯ ПРОВЕРКА 5 ДОКУМЕНТОВ
+# ============================================
+Write-Host ""
+Write-Host "6️⃣  📚 ОБЯЗАТЕЛЬНЫЕ 5 ДОКУМЕНТОВ ПРОЕКТА:" -ForegroundColor Magenta
+Write-Host "   ИИ ДОЛЖЕН ИСПОЛЬЗОВАТЬ ИХ В РАБОТЕ!" -ForegroundColor Red
+Write-Host ""
 
+$documents = @(
+    @{Name="1. Продуктовый чек-лист"; Path="docs/products/PRODUCT_CHECKLIST.md"},
+    @{Name="2. UX/UI гайдлайны"; Path="docs/ux-ui/UX_UI_GUIDELINES.md"},
+    @{Name="3. Техническая документация"; Path="docs/technical/TECHNICAL_DOCUMENTATION.md"},
+    @{Name="4. Правила безопасности"; Path="docs/security/SECURITY_RULES.md"},
+    @{Name="5. Интеграции"; Path="docs/integrations/SIMPLE_INTEGRATIONS.md"}
+)
+
+foreach ($doc in $documents) {
+    if (Test-Path $doc.Path) {
+        # Показываем ключевые пункты из каждого документа
+        $firstLine = Get-Content $doc.Path -TotalCount 1 -Encoding UTF8
+        Write-Host "   ✅ $($doc.Name)" -ForegroundColor Green
+        Write-Host "      📄 $firstLine" -ForegroundColor Gray
+    } else {
+        Write-Host "   ❌ $($doc.Name) - НЕ НАЙДЕН!" -ForegroundColor Red
+    }
+}
+
+Write-Host ""
+Write-Host "   🎯 КОГДА ИСПОЛЬЗОВАТЬ ДОКУМЕНТЫ:" -ForegroundColor Cyan
+Write-Host "   1. ДОКУМЕНТ 1 - ПЕРЕД новой функцией" -ForegroundColor Gray
+Write-Host "   2. ДОКУМЕНТ 2 - ПРИ проектировании интерфейса" -ForegroundColor Gray
+Write-Host "   3. ДОКУМЕНТ 3 - ПРИ технических решениях" -ForegroundColor Gray
+Write-Host "   4. ДОКУМЕНТ 4 - ПРИ работе с данными/оплатой" -ForegroundColor Gray
+Write-Host "   5. ДОКУМЕНТ 5 - ПРИ добавлении интеграций" -ForegroundColor Gray
+
+Write-Host ""
+Write-Host "   🚫 ЗАПРЕЩЕНО игнорировать эти документы!" -ForegroundColor Red
 # ============================================
 # 5. БЫСТРАЯ ПРОВЕРКА ОКРУЖЕНИЯ
 # ============================================
